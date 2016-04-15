@@ -1,6 +1,6 @@
 // out: ..
 <template lang="jade">
-div.zoombox(:style="style",@click="toggle")
+div.zoombox(:style="style",@click="toggle | notPrevented | prevent")
   img(v-bind:src="src" v-if="src && !loaded" v-el:imgsrc @load="processSrc" style="position:absolute;visibility:hidden")
   img.zoombox-image(v-el:img,:style="imgStyle",v-if="src && loaded",:src="src")
   div.zoombox-content(v-el:content,:style="contentStyle",v-if="loaded")
@@ -20,6 +20,10 @@ module.exports =
     require("vue-mixins/setCss")
     require("vue-mixins/onWindowScroll")
   ]
+
+  filters:
+    notPrevented: require("vue-filters/notPrevented")
+    prevent: require("vue-filters/prevent")
 
   created: ->
     @overlay = require("vue-overlay")(@getVue())
