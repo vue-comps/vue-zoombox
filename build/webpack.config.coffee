@@ -8,6 +8,7 @@ module.exports =
   module:
     loaders: [
       { test: /\.coffee$/, loader: "coffee"}
+      { test: /\.png$/, loader: "file"}
     ]
   plugins: [
     new webpack.optimize.UglifyJsPlugin compress: warnings: false

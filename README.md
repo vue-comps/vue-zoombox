@@ -1,11 +1,11 @@
 # vue-zoombox
 
 a advanced zoombox.
-- Zooms into everything (images, text)
 - Reposition on window resize
 - Full resolution for images
 - support for caption
 - support for scrolling
+- support for thumbs
 
 ### [Demo](https://vue-comps.github.io/vue-zoombox)
 
@@ -26,34 +26,107 @@ components:
   "zoombox": window.vueComps.zoombox
 ```
 ```html
-<zoombox style="width:200px">Content
-  <span slot="caption">A caption</span>
+<zoombox src="./path/to/img" thumb="./path/to/thumb">
+  <span>A caption</span>
+  <span slot="loading">loading...</span>
 </zoombox>
 ```
 see [`dev/`](dev/) for examples.
 
 #### Props
-| Name | type | default | description |
-| ---:| --- | ---| --- |
-| src | String | - | path to image. Image will be fitted into the box. |
-| opacity | Number | 0.5 | opacity of the overlay |
-| max-scale | Number | Number.MAX_VALUE | maximal zoom factor |
-| allow-scroll | Boolean | false | will not close on scroll |
-| disable-scroll	| Boolean	| false | will disable scrolling |
-| is-opened	| Boolean	| false | (two-way) set to open / close|
-| transition-in | function | no animation | set animation. Argument: {el,oldScale,style,cb} |
-| transition-out | function | no animation | set animation. Argument: {el,style,cb} |
-| caption-transition | function | no animation | set animation. Argument: {el,style,cb} |
+Name | type | default | description
+---:| --- | ---| ---
+src | String | - | (required) path to image. Image will be fitted into the box, if no thumb is given
+thumb | String | - | path to thumb
+delay | Number | 3000 | Only if thumb is given, delays loading of the image, in ms
+opacity | Number | 0.5 | opacity of the overlay
+max-scale | Number | Number.MAX_VALUE | maximal zoom factor
+allow-scroll | Boolean | false | will not close on scroll
+disable-scroll	| Boolean	| false | will disable scrolling
+is-opened	| Boolean	| false | (two-way) set to open / clos
+transition | String | "zoombox" | name of a vue transition. [Detailed description](#transition)
+caption-transition | String | "zoomboxCaption" | name of a vue transition. [Detailed description](#transition)
+
+if thumb is given the image is loaded after `delay` or on `mouseenter`.  
+If the image isn't loaded on click, the slot `loading` is displayed.
 
 #### Events
-| Name |  description |
-| ---:| --- |
-| close |  when received, will close |
-| before-open | will be called before open animation |
-| opened |  will be called when opened |
-| before-close |  will be called before close animation |
-| closed |  will be called when closed |
+Name | description
+---:| ---
+before-enter | will be called before open animation
+after-enter |  will be called when opened
+before-leave |  will be called before close animation
+after-leave |  will be called when closed
+thumb-loaded | will be called when thumb is ready
+image-loaded | will be called when image is ready
+toggled(isOpened:Boolean) | emitted when gets opened or closed. Alternative to use two-way `is-opened` prop
 
+
+#### Transition
+
+You can provide a vue transition like this:
+```js
+Vue.transition("fade",{
+  // your transition
+})
+// or in the instance:
+transitions: {
+  fade: {
+    // your transition
+  }
+}
+// usage:
+template: "<zoombox transition='fade'></zoombox>"
+```
+
+You can access several properties in your hooks:
+```js
+enter: function(el,cb) {
+  self = this
+  this.nextTick(function(){
+    self.imgScale // scale to get the small image size
+    self.scale // multiply with imgScale to get the big image size
+    // target top and left positions for big image size
+    self.relPos.top
+    self.relPos.left
+    // starting position for top and left are 0
+  })
+}
+```
+
+Example from [dev/basic.vue](dev/basic.vue)
+```coffee
+Velocity = require("velocity-animate")
+
+transitions:
+  zoombox:
+    css: false
+    enter: (el,done) ->
+      Velocity.hook(el, "scale", @imgScale)
+      @$nextTick =>
+        Velocity el, {scale:@imgScale*@scale,top:@relPos.top,left:@relPos.left}, {
+          duration: 1000,
+          queue: false,
+          ease: "easeOutQuad",
+          complete: done
+        }
+    leave: (el,done) ->
+      Velocity.hook(el, "scale", @imgScale*@scale)
+      Velocity el, {scale:@imgScale,top:0,left:0}, {
+        duration: 1000,
+        queue: false,
+        ease: "easeOutQuad",
+        complete: done
+      }
+```
+
+## Changelog
+- 1.0.0  
+removed support for other content (only images now)  
+now using vue transitions  
+events are renamed after vue transitions  
+added support for thumbs  
+added unit tests  
 
 # Development
 Clone repository.

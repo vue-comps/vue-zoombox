@@ -12,6 +12,7 @@ module.exports = (config) ->
           { test: /\.vue$/, loader: "vue-loader" }
           { test: /\.html$/, loader: "html"}
           { test: /\.css$/, loader: "style-loader!css-loader" }
+          { test: /\.png$/, loader: "file"}
         ]
     webpackMiddleware:
       noInfo: true
@@ -29,4 +30,4 @@ module.exports = (config) ->
       require("karma-chai-spies")
       require("karma-vue-component")
     ]
-    browsers: ["Chrome","Firefox"]
+    browsers: ["Chromium","Firefox"]

@@ -1,12 +1,46 @@
 // out: ..
-<template lang="jade">
-div.zoombox(:style="style",@click="toggle | notPrevented | prevent")
-  img(v-bind:src="src" v-if="src && !loaded" v-el:imgsrc @load="processSrc" style="position:absolute;visibility:hidden")
-  img.zoombox-image(v-el:img,:style="imgStyle",v-if="src && loaded",:src="src")
-  div.zoombox-content(v-el:content,:style="contentStyle",v-if="loaded")
-    slot
-  div.zoombox-caption(v-el:caption,:style="captionStyle",v-if="opened")
-    slot(name="caption")
+<template lang="pug">
+div.zoombox(
+  :style="computedStyle",
+  @click="toggle"
+  )
+  img(
+    v-bind:src="cSrc"
+    v-if="cSrc && !loaded"
+    v-el:imgsrc
+    @load="processSrc"
+    style="position:absolute;visibility:hidden"
+    )
+  img.zoombox-image(
+    :style="thumbStyle",
+    v-el:thumb,
+    v-if="!thumbLoaded || (!opened && !opening && !closing)",
+    style="display:inline-block; transform-origin: top left; position: absolute;line-height: 0;top:0;left:0",
+    @load="processThumb",
+    :src="thumbSrc",
+    @mouseenter="load"
+    )
+  template(v-if="loaded")
+    img.zoombox-image(
+      :style="iStyle",
+      style="display:inline-block; transform-origin: top left; line-height: 0",
+      v-if="opened",
+      :src="src",
+      :transition="cTransition"
+      )
+    div.zoombox-caption(
+      v-el:caption,
+      :style="captionStyle",
+      style="position: fixed",
+      v-if="opened",
+      :transition="ccTransition"
+      )
+      slot
+  div.zoombox-loading(
+    v-if="!loaded && opened"
+    style="position:fixed;left: 50%;top: 50%;transform: translate(-50%, -50%);"
+    )
+    slot(name="loading") loading ...
 </template>
 
 <script lang="coffee">
@@ -16,217 +50,225 @@ module.exports =
     require("vue-mixins/getViewportSize")
     require("vue-mixins/isOpened")
     require("vue-mixins/onWindowResize")
-    require("vue-mixins/getVue")
-    require("vue-mixins/setCss")
+    require("vue-mixins/vue")
     require("vue-mixins/onWindowScroll")
+    require("vue-mixins/transition")
+    require("vue-mixins/style")
   ]
 
-  filters:
-    notPrevented: require("vue-filters/notPrevented")
-    prevent: require("vue-filters/prevent")
-
-  created: ->
-    @overlay = require("vue-overlay")(@getVue())
-
   props:
-    "src":
+    style:
+      default: -> []
+    src:
       type: String
-    "transitionIn":
-      type: Function
-      default: ({el,style,cb}) ->
-        for key,val of style
-          @setCss(el,key,val)
-        cb()
-    "transitionOut":
-      type: Function
-      default: ({el,style,cb}) ->
-        for key,val of style
-          @setCss(el,key,val)
-        cb()
-    "captionTransition":
-      type: Function
-      default: ({el,style,cb}) ->
-        @captionStyle.opacity = 1
-        cb()
-    "maxScale":
+      required: true
+    thumb:
+      type: String
+    delay:
+      type: Number
+      default: 3000
+      coerce: Number
+    transition:
+      type: String
+    captionTransition:
+      type: String
+    maxScale:
       type: Number
       default: Number.MAX_VALUE
-    "allowScroll":
+      coerce: Number
+    allowScroll:
       type: Boolean
       default: false
-    "disableScroll":
+    disableScroll:
       type: Boolean
       default: false
-    "opacity":
+    opacity:
       type: Number
       default: 0.5
+      coerce: Number
 
+  computed:
+    ccTransition: ->
+      name = @captionTransition
+      name ?= "zoomboxCaption"
+      hooks = @Vue.util.resolveAsset(@$parent.$options,'transitions',name)
+      hooks ?= @$options.transitions[name]
+      hooks ?= {}
+      @$options.transitions[name] = hooks
+      if @disableTransition
+        return null
+      return name
+    thumbSrc: ->
+      return @thumb if @thumb
+      return @src
+    cSrc: ->
+      if not @thumb or @shouldLoad
+        return @src
+    hasCaption: -> @_slotContents.default?
+    mergeStyle: ->
+      style =
+        position: "relative"
+        cursor: if @opened then "zoom-out" else "zoom-in"
+        height: @thumbSize.height+"px"
+        width: @thumbSize.width+"px"
+      return style
+    thumbStyle: ->
+      unless @thumb
+        transform: "scale(#{@imgScale})"
+    iStyle: ->
+      if @imgScale and @loaded
+        if @realOpened
+          return {
+            zIndex: @zIndex
+            transform: "scale(#{@scale*@imgScale})"
+            top: @absPos.top+"px"
+            left: @absPos.left+"px"
+            position: "fixed"
+          }
+        else if @closing
+          return {
+            top: @relPos.top+"px"
+            left: @relPos.left+"px"
+            zIndex: @zIndex
+            position: "absolute"
+          }
+        else
+          return zIndex: @zIndex, position: "absolute"
+    captionStyle: ->
+      if @opened
+        style =
+          zIndex: @zIndex
+        if @available
+          style.top = (@windowSize.height + @pos.height*@scale) / 2 + 6+'px'
+          style.left = (@windowSize.width - @$els.caption.offsetWidth) / 2+'px'
+        if @opening
+          style.opacity = 0
+        return style
+    realOpened: -> @opened and not @opening and not @closing
+    zoom: ->
+      if @loaded and @available
+        if @hasCaption and @$els.caption?
+          captionHeight = @$els.caption.offsetHeight
+          return 1-2*Math.max(0.05*@windowSize.height,captionHeight*2)/@windowSize.height
+        else
+          return 0.9
+      return null
+    scale: ->
+      if @zoom
+        scale = Math.min(@zoom*@windowSize.width / @pos.width, @zoom*@windowSize.height / @pos.height)
+        scale = @maxScale if scale > @maxScale
+        return scale
+      return null
+    absPos: ->
+      if @scale
+        absLeft = (@windowSize.width - @pos.width*@scale) / 2
+        absTop = (@windowSize.height - @pos.height*@scale) / 2
+        return left: absLeft, top: absTop
+      return {}
+    relPos: ->
+      if @scale
+        return left: @absPos.left - @pos.left, top: @absPos.top - @pos.top
+      return {}
 
   data: ->
+    transitionDefault: "zoombox"
+    shouldLoad: false
+    thumbLoaded: false
+    disableTransition: false
     loaded: false
+    opening: false
+    available: false
+    closing: false
+    pos: null
+    windowSize: null
+    zIndex: null
     imgScale: 0
-    style:
-      position: "relative"
-      cursor: "zoom-in"
-    captionStyle:
-      opacity: 0
-      position: "fixed"
-      top: 0
-      left: 0
-      zIndex: null
-    imgStyle:
-      display: "inline-block"
-      position: "absolute"
-      lineHeight: 0
-      top: 0
-      left: 0
-      transform: null
-      transformOrigin: "top left"
-      zIndex: null
-    contentStyle:
-      display: "inline-block"
-      position: "relative"
-      top: 0
-      left: 0
-      transform: null
-      transformOrigin: "top left"
-      zIndex: null
-  events:
-    close: ->
-      @close()
-      true
+    imgSize: {}
+    thumbSize: {}
+
   watch:
-    "src":"process"
+    "src": ->
+      @loaded = false
+      unless @thumb
+        @thumbLoaded = false
+    "thumb": -> @thumbLoaded = false
 
   methods:
-    process: ->
-      @loaded = !@src?
+    load: ->
+      @shouldLoad = true
+    processThumb: ->
+      if @thumb
+        @thumbSize =
+          height: @$els.thumb.clientHeight
+          width: @$els.thumb.clientWidth
+        @thumbLoaded = true
+        @$emit "thumb-loaded"
     processSrc: ->
-      @$emit "image-loaded"
+      @imgSize = {height:@$els.imgsrc.clientHeight,width:@$els.imgsrc.clientWidth}
       if @$el.clientHeight > 0
-        scaleH = @$el.clientHeight / @$els.imgsrc.clientHeight
+        scaleH = @$el.clientHeight / @imgSize.height
       else
         scaleH = Number.MAX_VALUE
       if @$el.clientWidth > 0
-        scaleW = @$el.clientWidth / @$els.imgsrc.clientWidth
+        scaleW = @$el.clientWidth / @imgSize.width
       else
         scaleW = Number.MAX_VALUE
       @imgScale = Math.min(scaleH,scaleW)
       if @imgScale < Number.MAX_VALUE
-        if @$el.clientHeight == 0
-          @$set "style.height", @$els.imgsrc.clientHeight*@imgScale+'px'
-        if @$el.clientWidth == 0
-          @$set "style.width", @$els.imgsrc.clientWidth*@imgScale+'px'
-        @imgStyle.transform = "scale(#{@imgScale})"
+        unless @thumb
+          @thumbSize =
+            height: @imgSize.height*@imgScale
+            width: @imgSize.width*@imgScale
+          @thumbLoaded = true
+          @$emit "thumb-loaded"
         @loaded = true
-
-    getScale: (pos,windowSize) ->
-      pos ?= @$el.getBoundingClientRect()
-      windowSize ?= @getViewportSize()
-      if @hasCaption
-        captionHeight = @$els.caption.offsetHeight
-        zoom = 1-2*Math.max(0.05*windowSize.height,captionHeight*2)/windowSize.height
+        @$emit "image-loaded"
+        if @opened
+          @$nextTick =>
+            @available = true
+            @calc()
+    calc: ->
+      @$set "pos", @$el.getBoundingClientRect()
+      @$set "windowSize", @getViewportSize()
+    show: ->
+      return if @opened
+      unless @loaded
+        @disableTransition = true
+        @setOpened()
+        @$once "image-loaded", =>
+          @$nextTick =>
+            @disableTransition = false
       else
-        zoom = 0.9
-      scale = Math.min(zoom*windowSize.width / pos.width, zoom*windowSize.height / pos.height)
-      scale = @maxScale if scale > @maxScale
-      return scale
-
-    getAbsPos: (scale,pos,windowSize) ->
-      windowSize ?= @getViewportSize()
-      pos ?= @$el.getBoundingClientRect()
-      scale ?= @getScale(pos,windowSize)
-      absLeft = (windowSize.width - pos.width*scale) / 2
-      absTop = (windowSize.height - pos.height*scale) / 2
-      return left: absLeft, top: absTop
-
-    getRelPos: (pos,absPos,scale,windowSize) ->
-      pos ?= @$el.getBoundingClientRect()
-      unless absPos?
-        windowSize ?= @getViewportSize()
-        scale ?= @getScale(pos,windowSize)
-        absPos = @getAbsPos(scale,pos,windowSize)
-      return left: absPos.left - pos.left, top: absPos.top - pos.top
-
-    show: (alreadyOpen=false) ->
-      return unless @opened
-      isOpened = false
-      setOpened = =>
-        unless isOpened
-          isOpened = true
-          @$emit "opened"
-      @hasCaption = @$els.caption.offsetHeight > 0 unless @hasCaption?
-      @hasContent = @$els.content.offsetHeight > 0 unless @hasContent?
-      @style.cursor = "zoom-out"
-      pos = @$el.getBoundingClientRect()
-      windowSize = @getViewportSize()
-      scale = @getScale(pos,windowSize)
-      absPos = @getAbsPos(scale,pos,windowSize)
-      relPos = @getRelPos(pos,absPos,scale,windowSize)
-
-      @$emit "beforeOpen"
-      setAbsPos = (style,absPos) ->
-        style.left = absPos.left+'px'
-        style.top = absPos.top+'px'
-      if @src
-        if alreadyOpen
-          setAbsPos(@imgStyle,absPos)
-          @imgStyle.transform = "scale(#{@imgScale*scale})"
-        else
-          @transitionIn el:@$els.img,oldScale:@imgScale,style:{transform:"scale(#{@imgScale*scale})",top:relPos.top+'px',left:relPos.left+'px'},cb: =>
-            setAbsPos(@imgStyle,absPos)
-            @imgStyle.position = "fixed"
-            setOpened()
-      if @hasCaption
-        @captionStyle.top = (windowSize.height + pos.height*scale) / 2 + 6+'px'
-        @captionStyle.left = (windowSize.width - @$els.caption.offsetWidth) / 2+'px'
-        unless alreadyOpen
-          @captionTransition el:@$els.caption,style:{opacity:1},cb: setOpened
-      if @hasContent
-        if alreadyOpen
-          setAbsPos(@contentStyle,absPos)
-          @contentStyle.transform = "scale(#{scale})"
-        else
-          @transitionIn el:@$els.content,style:{transform:"scale(#{scale})",top:relPos.top+'px',left:relPos.left+'px'},cb: =>
-            setAbsPos(@contentStyle,absPos)
-            @contentStyle.position = "fixed"
-            setOpened()
+        @calc()
+        @setOpened()
+        @opening = true
+        endOpening = =>
+          @opening = false
+          @$off "after-enter", endOpening
+          @$off "enter-cancelled", endOpening
+        @$on "after-enter", endOpening
+        @$on "enter-cancelled", endOpening
+        @$nextTick =>
+          @available = true
 
     hide: ->
       return unless @opened
-      isClosed = false
-      setClosed = =>
-        unless isClosed
-          isClosed = true
-          @setClosed()
-          @$emit "closed"
-      @style.cursor = "zoom-in"
-      @$emit "beforeClose"
-      relPos = @getRelPos()
-      if @src
-        @imgStyle.left = relPos.left+'px'
-        @imgStyle.top = relPos.top+'px'
-        @imgStyle.position = "absolute"
-        @$nextTick =>
-          @transitionOut el:@$els.img,style:{transform:"scale(#{@imgScale})",top:0,left:0},cb: setClosed
-      if @hasCaption
-        @captionTransition el:@$els.caption,style:{opacity:0},cb: setClosed
-      if @hasContent
-        @contentStyle.left = relPos.left+'px'
-        @contentStyle.top = relPos.top+'px'
-        @contentStyle.position = "relative"
-        @$nextTick =>
-          @transitionOut el:@$els.content,style:{transform:"scale(1)",top:0,left:0},cb: setClosed
+      @closing = true
+      endClosing = =>
+        @closing = false
+        @available = false
+        @$off "after-leave", endClosing
+        @$off "leave-cancelled", endClosing
+      @$on "after-leave", endClosing
+      @$on "leave-cancelled", endClosing
+      @setClosed()
 
     open: ->
       return if @opened
       {zIndex,close} = @overlay.open allowScroll:!@disableScroll, opacity:@opacity, onBeforeClose: => @close()
-      @contentStyle.zIndex = zIndex + 1
-      @imgStyle.zIndex = zIndex
-      @captionStyle.zIndex = zIndex
+      @zIndex = zIndex
       @closeOverlay = close
       @removeScrollListener = @onWindowScroll @close unless @allowScroll
-      @setOpened()
       @$nextTick @show
 
     close: ->
@@ -234,19 +276,26 @@ module.exports =
       @hide()
       @closeOverlay?()
       @removeScrollListener?()
-      @contentStyle.zIndex = null
-      @imgStyle.zIndex = null
+      @zIndex = null
       @closeOverlay = null
 
-    toggle: ->
+    toggle: (e) ->
+      if e?
+        return if e.defaultPrevented
+        e.preventDefault()
       if @opened
         @close()
       else
         @open()
+  beforeCompile: ->
+    @available = false
 
-  attached: ->
-    @process()
-    @onWindowResize => @show(true)
+  ready: ->
+    @overlay = require("vue-overlay")(@Vue)
+    @available = true if @opened
+    @onWindowResize @calc
+    if @delay and @thumb
+      setTimeout @load, @delay
 
 
 </script>
