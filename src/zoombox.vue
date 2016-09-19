@@ -70,8 +70,10 @@ module.exports =
       coerce: Number
     transition:
       type: String
+      default: "zoombox"
     captionTransition:
       type: String
+      default: "zoomboxCaption"
     maxScale:
       type: Number
       default: Number.MAX_VALUE
@@ -90,7 +92,6 @@ module.exports =
   computed:
     ccTransition: ->
       name = @captionTransition
-      name ?= "zoomboxCaption"
       hooks = @Vue.util.resolveAsset(@$parent.$options,'transitions',name)
       hooks ?= @$options.transitions[name]
       hooks ?= {}
