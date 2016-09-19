@@ -298,5 +298,7 @@ module.exports =
     if @delay and @thumb
       setTimeout @load, @delay
 
-
+  beforeDestroy: ->
+    @closeOverlay?()
+    @removeScrollListener?()
 </script>

@@ -121,6 +121,9 @@ transitions:
 ```
 
 ## Changelog
+-  
+close overlay on destroy  
+
 - 1.0.0  
 removed support for other content (only images now)  
 now using vue transitions  
