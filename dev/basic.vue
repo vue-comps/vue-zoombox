@@ -12,7 +12,7 @@
   p without thumbnail
   zoombox(
     :src="src",
-    style="width:200px",
+
     v-ref:img
     )
     span a caption

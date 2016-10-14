@@ -36,14 +36,14 @@ see [`dev/`](dev/) for examples.
 #### Props
 Name | type | default | description
 ---:| --- | ---| ---
-src | String | - | (required) path to image. Image will be fitted into the box, if no thumb is given
+src | String | - | (required) path to image.
 thumb | String | - | path to thumb
-delay | Number | 3000 | Only if thumb is given, delays loading of the image, in ms
+delay | Number | 3000 | Only if thumb is given, delays loading of the image, in ms. 0 to disable auto load of image.
 opacity | Number | 0.5 | opacity of the overlay
 max-scale | Number | Number.MAX_VALUE | maximal zoom factor
 allow-scroll | Boolean | false | will not close on scroll
 disable-scroll	| Boolean	| false | will disable scrolling
-is-opened	| Boolean	| false | (two-way) set to open / clos
+is-opened	| Boolean	| false | (two-way) set to open / close
 transition | String | "zoombox" | name of a vue transition. [Detailed description](#transition)
 caption-transition | String | "zoomboxCaption" | name of a vue transition. [Detailed description](#transition)
 
@@ -121,8 +121,9 @@ transitions:
 ```
 
 ## Changelog
--  
+- 1.0.1  
 close overlay on destroy  
+changed container behavior to allow responsive images (#1)  
 
 - 1.0.0  
 removed support for other content (only images now)  

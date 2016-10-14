@@ -15,27 +15,26 @@ div.zoombox(
     :style="thumbStyle",
     v-el:thumb,
     v-if="!thumbLoaded || (!opened && !opening && !closing)",
-    style="display:inline-block; transform-origin: top left; position: absolute;line-height: 0;top:0;left:0",
+    style="transform-origin: top left; max-width: 100%; height: auto",
     @load="processThumb",
     :src="thumbSrc",
     @mouseenter="load"
     )
-  template(v-if="loaded")
-    img.zoombox-image(
-      :style="iStyle",
-      style="display:inline-block; transform-origin: top left; line-height: 0",
-      v-if="opened",
-      :src="src",
-      :transition="cTransition"
-      )
-    div.zoombox-caption(
-      v-el:caption,
-      :style="captionStyle",
-      style="position: fixed",
-      v-if="opened",
-      :transition="ccTransition"
-      )
-      slot
+  img.zoombox-image(
+    :style="iStyle",
+    style="display:inline-block; transform-origin: top left; line-height: 0",
+    v-if="loaded && opened",
+    :src="src",
+    :transition="cTransition"
+    )
+  div.zoombox-caption(
+    v-el:caption,
+    :style="captionStyle",
+    style="position: fixed",
+    v-if="opened || !loaded",
+    :transition="ccTransition"
+    )
+    slot
   div.zoombox-loading(
     v-if="!loaded && opened"
     style="position:fixed;left: 50%;top: 50%;transform: translate(-50%, -50%);"
@@ -108,14 +107,17 @@ module.exports =
     hasCaption: -> @_slotContents.default?
     mergeStyle: ->
       style =
+        display: "inline-block"
+        lineHeight: if @loaded and not @opened then 0 else null
         position: "relative"
         cursor: if @opened then "zoom-out" else "zoom-in"
-        height: @thumbSize.height+"px"
-        width: @thumbSize.width+"px"
+      if @opened || @closing
+        style.height = @thumbSize.height+"px"
+        style.width = @thumbSize.width+"px"
       return style
     thumbStyle: ->
-      unless @thumb
-        transform: "scale(#{@imgScale})"
+      #unless @thumb
+        #transform: "scale(#{@imgScale})"
     iStyle: ->
       if @imgScale and @loaded
         if @realOpened
@@ -136,21 +138,21 @@ module.exports =
         else
           return zIndex: @zIndex, position: "absolute"
     captionStyle: ->
+      unless @loaded
+        return visibility:"hidden", position: "absolute"
       if @opened
         style =
           zIndex: @zIndex
-        if @available
-          style.top = (@windowSize.height + @pos.height*@scale) / 2 + 6+'px'
-          style.left = (@windowSize.width - @$els.caption.offsetWidth) / 2+'px'
+          top: (@windowSize.height + @pos.height*@scale) / 2 + 6+'px'
+          left: (@windowSize.width - @captionSize.width) / 2+'px'
         if @opening
           style.opacity = 0
         return style
     realOpened: -> @opened and not @opening and not @closing
     zoom: ->
-      if @loaded and @available
-        if @hasCaption and @$els.caption?
-          captionHeight = @$els.caption.offsetHeight
-          return 1-2*Math.max(0.05*@windowSize.height,captionHeight*2)/@windowSize.height
+      if @windowSize
+        if @hasCaption
+          return 1-2*Math.max(0.05*@windowSize.height,@captionSize.height*2)/@windowSize.height
         else
           return 0.9
       return null
@@ -175,12 +177,12 @@ module.exports =
     transitionDefault: "zoombox"
     shouldLoad: false
     thumbLoaded: false
-    disableTransition: false
+    disableTransition: true
     loaded: false
     opening: false
-    available: false
     closing: false
     pos: null
+    captionSize: null
     windowSize: null
     zIndex: null
     imgScale: 0
@@ -190,6 +192,7 @@ module.exports =
   watch:
     "src": ->
       @loaded = false
+      @disableTransition = true
       unless @thumb
         @thumbLoaded = false
     "thumb": -> @thumbLoaded = false
@@ -204,8 +207,7 @@ module.exports =
           width: @$els.thumb.clientWidth
         @thumbLoaded = true
         @$emit "thumb-loaded"
-    processSrc: ->
-      @imgSize = {height:@$els.imgsrc.clientHeight,width:@$els.imgsrc.clientWidth}
+    processScale: ->
       if @$el.clientHeight > 0
         scaleH = @$el.clientHeight / @imgSize.height
       else
@@ -215,33 +217,32 @@ module.exports =
       else
         scaleW = Number.MAX_VALUE
       @imgScale = Math.min(scaleH,scaleW)
-      if @imgScale < Number.MAX_VALUE
+      if not @thumb and @imgScale < Number.MAX_VALUE and @imgScale > 0
+        @thumbSize =
+          height: @imgSize.height*@imgScale
+          width: @imgSize.width*@imgScale
+    processSrc: ->
+      @imgSize = {height:@$els.imgsrc.clientHeight,width:@$els.imgsrc.clientWidth}
+      @captionSize = {height:@$els.caption.offsetHeight,width:@$els.caption.offsetWidth}
+      @processScale()
+      if @imgScale < Number.MAX_VALUE && @imgScale > 0
         unless @thumb
-          @thumbSize =
-            height: @imgSize.height*@imgScale
-            width: @imgSize.width*@imgScale
           @thumbLoaded = true
           @$emit "thumb-loaded"
         @loaded = true
+        @disableTransition = false
         @$emit "image-loaded"
         if @opened
           @$nextTick =>
-            @available = true
             @calc()
     calc: ->
       @$set "pos", @$el.getBoundingClientRect()
       @$set "windowSize", @getViewportSize()
     show: ->
       return if @opened
-      unless @loaded
-        @disableTransition = true
-        @setOpened()
-        @$once "image-loaded", =>
-          @$nextTick =>
-            @disableTransition = false
-      else
-        @calc()
-        @setOpened()
+      @calc() unless @closing or not @loaded
+      @setOpened()
+      if @loaded
         @opening = true
         endOpening = =>
           @opening = false
@@ -249,15 +250,12 @@ module.exports =
           @$off "enter-cancelled", endOpening
         @$on "after-enter", endOpening
         @$on "enter-cancelled", endOpening
-        @$nextTick =>
-          @available = true
 
     hide: ->
       return unless @opened
       @closing = true
       endClosing = =>
         @closing = false
-        @available = false
         @$off "after-leave", endClosing
         @$off "leave-cancelled", endClosing
       @$on "after-leave", endClosing
@@ -294,7 +292,10 @@ module.exports =
   ready: ->
     @overlay = require("vue-overlay")(@Vue)
     @available = true if @opened
-    @onWindowResize @calc
+    @onWindowResize =>
+      @processScale()
+      @calc()
+
     if @delay and @thumb
       setTimeout @load, @delay
 
