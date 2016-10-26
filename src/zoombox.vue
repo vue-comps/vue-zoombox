@@ -35,6 +35,13 @@ div.zoombox(
     :transition="ccTransition"
     )
     slot
+  div.zoombox-opened(
+    :style="{zIndex:zIndex}"
+    style="position: fixed;top:0;left:0;bottom:0;right:0",
+    v-if="hasOpened && opened",
+    :transition="ccTransition"
+    )
+    slot(name="opened")
   div.zoombox-loading(
     v-if="!loaded && opened"
     style="position:fixed;left: 50%;top: 50%;transform: translate(-50%, -50%);"
@@ -104,11 +111,12 @@ module.exports =
     cSrc: ->
       if not @thumb or @shouldLoad
         return @src
+    hasOpened: -> @_slotContents.opened?
     hasCaption: -> @_slotContents.default?
     mergeStyle: ->
       style =
         display: "inline-block"
-        lineHeight: if @loaded and not @opened then 0 else null
+        lineHeight: if @loaded and (not @opened and not @closing)  then 0 else null
         position: "relative"
         cursor: if @opened then "zoom-out" else "zoom-in"
       if @opened || @closing

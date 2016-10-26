@@ -29,6 +29,7 @@ components:
 <zoombox src="./path/to/img" thumb="./path/to/thumb">
   <span>A caption</span>
   <span slot="loading">loading...</span>
+  <span slot="opened">Will be shown besides the image when opened</span>
 </zoombox>
 ```
 see [`dev/`](dev/) for examples.
@@ -121,6 +122,10 @@ transitions:
 ```
 
 ## Changelog
+- 1.0.2  
+added opened slot  
+little bugfix with lineheight  
+
 - 1.0.1  
 close overlay on destroy  
 changed container behavior to allow responsive images (#1)  

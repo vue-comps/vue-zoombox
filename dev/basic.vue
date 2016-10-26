@@ -9,6 +9,7 @@
     v-ref:thumb
     )
     span a caption
+    div(style="left:10%;top:45%;color:white;font-size:20px;position:absolute" slot="opened") <-
   p without thumbnail
   zoombox(
     :src="src",
